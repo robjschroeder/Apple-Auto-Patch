@@ -97,12 +97,12 @@ function Write-Log {
     if ($logLevels.IndexOf($Level) -ge $logLevels.IndexOf($global:LogLevel)) {
         # Write to console with color coding
         switch ($Level) {
-            "ERROR" { Write-Host $logEntry -ForegroundColor Red }
-            "WARNING" { Write-Host $logEntry -ForegroundColor Yellow }
-            "INFO" { Write-Host $logEntry -ForegroundColor Green }
-            "DEBUG" { Write-Host $logEntry -ForegroundColor Cyan }
-            "VERBOSE" { Write-Host $logEntry -ForegroundColor Magenta }
-            default { Write-Host $logEntry }
+            "ERROR" { Write-Output $logEntry }
+            "WARNING" { Write-Output $logEntry }
+            "INFO" { Write-Output $logEntry }
+            "DEBUG" { Write-Output $logEntry }
+            "VERBOSE" { Write-Output $logEntry }
+            default { Write-Output $logEntry }
         }
 
         # Write to log file if enabled
@@ -347,23 +347,171 @@ function Create-UpdatePlan {
             $planStatus = $($planStatusContent.status.state)
             $errorReasons = $($planStatusContent.status.errorReasons)
 
-            if ($planStatus -eq "PlanFailed") {
-                if ($errorReasons -eq "EXISTING_PLAN_FOR_DEVICE_IN_PROGRESS") {
-                    Write-Log-Verbose "Plan Status: $($planStatus)" -Verbose
-                    Write-Log-Verbose "Plan Error Reasons: $($errorReasons)" -Verbose
-                } else {
-                    Write-Log-Warning "Plan Status: $($planStatus)"
-                    Write-Log-Warning "Plan Error Reasons: $($errorReasons)"
-                }
-            } else {
-                Write-Log-Info "Plan Status: $($planStatus)"
-            }
+            Get-PlanStatusSummary -State $planStatus -ErrorReasons $errorReasons
+
+            # if ($planStatus -eq "PlanFailed") {
+            #     if ($errorReasons -eq "EXISTING_PLAN_FOR_DEVICE_IN_PROGRESS") {
+            #         Write-Log-Verbose "Plan Status: $($planStatus)" -Verbose
+            #         Write-Log-Verbose "Plan Error Reasons: $($errorReasons)" -Verbose
+            #     } else {
+            #         Write-Log-Warning "Plan Status: $($planStatus)"
+            #         Write-Log-Warning "Plan Error Reasons: $($errorReasons)"
+            #     }
+            # } else {
+            #     Write-Log-Info "Plan Status: $($planStatus)"
+            # }
 
         } else {
             Write-Log-Warning "Failed to create update plan. Status code: $($softwareUpdatePlanResponse.StatusCode)."
         }
     } catch {
         Write-Log-Error "Error creating update plan: $_"
+    }
+}
+
+function Get-PlanStatusSummary {
+    param (
+        [string]$State,
+        [string[]]$ErrorReasons
+    )
+
+    $planStates = @{
+        "Unknown" = "The plan was either just created and could not be fully initialized yet, or the database is corrupted."
+        "Init" = "Waiting for queue assignment so processing can start."
+        "PendingPlanValidation" = "Processing validation logic."
+        "AcceptingPlan" = "Passed all validation checks; added to planning queue."
+        "ProcessingPlanType" = "Determining update action path."
+        "RejectingPlan" = "Validation failed; removed from planning queue."
+        "StartingPlan" = "Preparing to begin update."
+        "PlanFailed" = "Validation failed or unexpected error condition."
+        "SchedulingScanForOSUpdates" = "ScheduleOSUpdateScan command queued."
+        "ProcessingScheduleOSUpdatesScanResponse" = "Processing scan response."
+        "WaitingForScheduleOSUpdateScanToComplete" = "Waiting for scan completion."
+        "CollectingAvailableOSUpdates" = "AvailableOSUpdates command queued."
+        "ProcessingAvailableOSUpdatesResponse" = "Processing updates response."
+        "ProcessingSchedulingType" = "Evaluating install path (MDM/DDM)."
+        "SchedulingDDM" = "Queuing DeclarativeManagement command."
+        "SchedulingMDM" = "Proceeding with MDM-based update."
+        "WaitingToStartDDMUpdate" = "Waiting for DDM to report update start."
+        "ProcessingDDMStatusResponse" = "Evaluating DDM update status."
+        "CollectingDDMStatus" = "Monitoring in-progress DDM update."
+        "SchedulingOSUpdate" = "ScheduleOSUpdate command queued."
+        "ProcessingScheduleOSUpdateResponse" = "Processing ScheduleOSUpdate response."
+        "CollectingOSUpdateStatus" = "OSUpdateStatus command queued."
+        "ProcessingOSUpdateStatusResponse" = "Evaluating update status response."
+        "WaitingToCollectOSUpdateStatus" = "Waiting before next status check."
+        "PlanCompleted" = "Update completed successfully."
+        "PlanCanceled" = "Manually canceled by user."
+        "PlanException" = "Unexpected exception caused failure."
+        "ProcessingPlanTypeMdm" = "Determining first MDM command."
+    }
+
+    $errorDescriptions = @{
+        "APPLE_SILICON_NO_ESCROW_KEY" = "Requires escrow of the bootstrap token for M-series chips."
+        "NOT_SUPERVISED" = "Device is not supervised; MDM commands fail."
+        "NOT_MANAGED" = "Device is not managed; MDM commands fail."
+        "NO_DISK_SPACE" = "Computer's storage is full."
+        "NO_UPDATES_AVAILABLE" = "No updates available for current OS."
+        "SPECIFIC_VERSION_UNAVAILABLE" = "Version not available on Apple servers."
+        "ACTION_NOT_SUPPORTED_FOR_DEVICE_TYPE" = "Unsupported action for device type."
+        "PLAN_NOT_FOUND" = "Plan removed manually from database."
+        "APPLE_SOFTWARE_LOOKUP_SERVICE_ERROR" = "Apple update servers are offline and not cached."
+        "EXISTING_PLAN_FOR_DEVICE_IN_PROGRESS" = "Device already has a plan in progress."
+        "DECLARATIVE_DEVICE_MANAGEMENT_SOFTWARE_UPDATES_NOT_SUPPORTED_FOR_DEVICE_OS_VERSION" = "DDM updates require newer OS versions (macOS 14+, iOS 17+)."
+        "DOWNGRADE_NOT_SUPPORTED" = "OS downgrades are not supported."
+        "DECLARATIVE_SERVICE_ERROR" = "Communication failure with declarative server."
+        "UNABLE_TO_FIND_UPDATES_AND_OUT_OF_RETRIES" = "Exceeded retries collecting update info."
+        "DATA_INTEGRITY_VIOLATION_EXCEPTION" = "Database integrity violation detected."
+        "ILLEGAL_ARGUMENT_EXCEPTION" = "Illegal argument received in update status."
+        "MDM_EXCEPTION" = "Unexpected error queuing MDM commands."
+        "ACCEPT_PLAN_FAILURE" = "Unexpected error accepting plan."
+        "SCHEDULE_PLAN_FAILURE" = "Unexpected error scheduling plan."
+        "REJECT_PLAN_FAILURE" = "Unexpected error rejecting plan."
+        "START_PLAN_FAILURE" = "Unexpected error starting plan."
+        "QUEUE_SCHEDULED_OS_UPDATE_SCAN_FAILURE" = "Error queuing ScheduleOSUpdateScan."
+        "SCAN_WAIT_FINISHED_FAILURE" = "Error completing update scan step."
+        "QUEUE_AVAILABLE_OS_UPDATE_COMMAND_FAILURE" = "Error queuing AvailableOsUpdates."
+        "MDM_CLIENT_EXCEPTION" = "MDM client failed during ScheduleOSUpdate."
+        "QUEUE_SCHEDULE_OS_UPDATE_FAILURE" = "Failed to queue ScheduleOSUpdate."
+        "QUEUE_OS_UPDATE_STATUS_COMMAND_FAILURE" = "Failed to queue OsUpdateStatus command."
+        "STILL_IN_PROGRESS_FAILURE" = "Error checking in-progress status."
+        "WAIT_TO_COLLECT_OS_UPDATE_STATUS_FAILURE" = "Error waiting for update status."
+        "IS_DOWNLOADED_AND_NEEDS_INSTALL_FAILURE" = "Error checking if download completed."
+        "IS_INSTALLED_FAILURE" = "Error checking installation success."
+        "IS_DOWNLOAD_ONLY_AND_DOWNLOADED_FAILURE" = "Download-only command validation failed."
+        "VERIFY_INSTALLATION_FAILURE" = "Update installation verification failed."
+        "IS_MAC_OS_UPDATE_FAILURE" = "Could not determine if update was for macOS."
+        "IS_LATEST_FAILURE" = "Error starting plan with LATEST_* version type."
+        "IS_SPECIFIC_VERSION_FAILURE" = "Error starting specific version plan."
+        "HANDLE_COMMAND_QUEUE_FAILURE" = "Failure queuing core update commands."
+        "SPECIFIC_VERSION_UNAVAILABLE_FOR_DEVICE_MODEL" = "Version not compatible with device model."
+        "INVALID_CONFIGURATION_DECLARATION" = "Device returned invalid configuration declaration."
+        "UNKNOWN" = "Database corrupted or undefined error occurred."
+    }
+
+    # Status output
+    $description = $planStates[$State]
+    if (-not $description) { $description = "Unknown plan state: $State" }
+
+    Write-Log-Info "Plan Status: $State"
+    Write-Log-Info "Description: $description"
+
+    if ($ErrorReasons) {
+        foreach ($error in $ErrorReasons) {
+            $errorText = $errorDescriptions[$error]
+            if (-not $errorText) { $errorText = "Unknown error: $error" }
+            Write-Log-Warning "Error Reason: $error"
+            Write-Log-Warning "Description: $errorText"
+        }
+    }
+}
+
+function Get-ExistingPlan {
+    param (
+        [string]$DeviceID,
+        [string]$ForceInstallLocalDateTime
+    )
+
+    $Headers = @{
+        "accept" = "application/json"
+        "Authorization" = "Bearer $($bearerTokenInformation['Token'])"
+    }
+
+    # Encode individual values only
+    $encodedDeviceID = [System.Web.HttpUtility]::UrlEncode($DeviceID)
+    $encodedDateTime = [System.Web.HttpUtility]::UrlEncode($ForceInstallLocalDateTime)
+
+    # Construct filter without encoding the whole filter string
+    $filter = "device.deviceId==$encodedDeviceID;forceInstallLocalDateTime==$encodedDateTime"
+    $encodedUri = "$($jamfProInformation['URI'])/api/v1/managed-software-updates/plans?filter=$filter"
+
+    try {
+        $planExistsResponse = Invoke-JamfAPIGETRequest -Uri $encodedUri -Headers $Headers -RetryCount 1
+        if (-not $planExistsResponse) {
+            Write-Log-Error "No response received from the API."
+            return $null
+        }
+        if ($planExistsResponse.StatusCode -ne 200) {
+            Write-Log-Error "API request failed with status code: $($planExistsResponse.StatusCode)"
+            return $null
+        }
+
+        try {
+            $planExistsContent = $planExistsResponse.Content | ConvertFrom-Json
+            #Write-Log-Debug "API response content: $($planExistsContent | ConvertTo-Json -Depth 10)"
+
+            # Extract totalCount from the response
+            $totalCount = $planExistsContent.totalCount
+            #Write-Log-Info "Total count of existing plans: $totalCount"
+
+            return $planExistsContent
+        } catch {
+            Write-Log-Error "Failed to parse JSON response: $_"
+            return $null
+        }
+    } catch {
+        Write-Log-Error "Error during API request: $_"
+        return $null
     }
 }
 
@@ -470,6 +618,17 @@ function ProcessGroup {
         if ($bestMatch) {
             $targetVersion = $bestMatch.Version
             $targetDeadline = (Get-Date $bestMatch.ReleaseDate).AddDays($SWUDeferralDays + $bestMatch.DeadlineDays).Date.AddHours(18).ToUniversalTime()
+            # Check if plan already exists
+            Write-Log-Info "Checking for existing plan for $device with Install Local DateTime $($targetDeadline.ToString("yyyy-MM-ddTHH:mm:ss"))"
+            $existingPlan = Get-ExistingPlan -DeviceID $device -ForceInstallLocalDateTime $targetDeadline.ToString("yyyy-MM-ddTHH:mm:ss")
+            if ($existingPlan) {
+                $totalCount = $existingPlan.totalCount
+                if ($totalCount -gt 0) {
+                    Write-Log-Warning "Existing plan(s) found for $device. Total count: $totalCount - skipping update plan creation."
+                    Continue
+                } 
+            }
+            Start-Sleep 1
             Write-Log-Info "Creating update plan for $deviceName from $osVersion to $targetVersion with deadline $targetDeadline (VersionType: $resolvedVersionType)"
             try {
                 Create-UpdatePlan -DeviceID $device -VersionType $resolvedVersionType -TargetDeadline $targetDeadline.ToString("yyyy-MM-ddTHH:mm:ss") -UpdateAction $updateAction
@@ -482,6 +641,9 @@ function ProcessGroup {
         }
     }
 }
+
+
+
 
 
 
