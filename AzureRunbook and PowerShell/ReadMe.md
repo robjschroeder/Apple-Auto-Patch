@@ -5,7 +5,7 @@
 
 This script automates the creation of macOS update plans in Jamf Pro using:
 
-- **SOFA feed** for available macOS updates  
+- **SOFA feed** for available macOS, iOS, and iPadOS updates  
 - **Smart group logic** for staged rollouts  
 - **CVE evaluation** to prioritize security fixes  
 - **Azure Runbook** for scheduled execution
@@ -29,12 +29,12 @@ This script automates the creation of macOS update plans in Jamf Pro using:
 ## 📋 What It Does
 
 1. **Authenticates** with Jamf Pro API and fetches an access token.  
-2. **Fetches the SOFA feed** and parses available macOS updates.  
+2. **Fetches the SOFA feed** and parses available OS updates.  
 3. **Determines the latest version** to deploy based on group-defined version types:
    - `LATEST_ANY`
    - `LATEST_MAJOR`
    - `LATEST_MINOR`  
-4. **Fetches smart group members** and their macOS versions.  
+4. **Fetches smart group members** and their OS versions.  
 5. **Evaluates each group** to determine if an update is needed.  
 6. **Creates a software update plan** in Jamf Pro via the API.
 
@@ -43,8 +43,8 @@ This script automates the creation of macOS update plans in Jamf Pro using:
 ## 📊 Smart Group Evaluation
 
 Each group is evaluated using ProcessGroup, which:
-- Determines the availble date of the macOS releases based on your Software Udpate Deferals from Jamf Pro configuration profiles
-- Checks current macOS versions of members
+- Determines the availble date of the OS releases based on your Software Udpate Deferals from Jamf Pro configuration profiles
+- Checks current OS versions of members
 - Determines the latest OS supported based on the hardware of the device
 - Evaluates which release will be applied by the DDM update command
 - Skips if device is on a higher or equal to version than that being applied
