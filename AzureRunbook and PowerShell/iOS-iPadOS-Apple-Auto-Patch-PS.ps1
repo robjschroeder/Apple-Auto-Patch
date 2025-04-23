@@ -331,7 +331,7 @@ function Check-CVESeverity {
     $mediumDeadlineDays = 4
     $highDeadlineDays = 3
     $criticalDeadlineDays = 2
-    $activeDeadlineDays = 14
+    $activeDeadlineDays = 1
     
     Write-Output ""
     Write-Log-Info "Calculated deadline days for each OS version based on CVE severity"
