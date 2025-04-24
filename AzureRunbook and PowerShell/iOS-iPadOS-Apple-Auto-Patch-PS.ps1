@@ -108,12 +108,12 @@ function Write-Log {
     if ($logLevels.IndexOf($Level) -ge $logLevels.IndexOf($global:LogLevel)) {
         # Write to console with color coding
         switch ($Level) {
-            "ERROR" { Write-Host $logEntry -ForegroundColor Red }
-            "WARNING" { Write-Host $logEntry -ForegroundColor Yellow }
-            "INFO" { Write-Host $logEntry -ForegroundColor Green }
-            "DEBUG" { Write-Host $logEntry -ForegroundColor Cyan }
-            "VERBOSE" { Write-Host $logEntry -ForegroundColor Magenta }
-            default { Write-Host $logEntry }
+            "ERROR" { Write-Output $logEntry }
+            "WARNING" { Write-Output $logEntry }
+            "INFO" { Write-Output $logEntry }
+            "DEBUG" { Write-Output $logEntry }
+            "VERBOSE" { Write-Output $logEntry }
+            default { Write-Output $logEntry }
         }
 
         # Write to log file if enabled
