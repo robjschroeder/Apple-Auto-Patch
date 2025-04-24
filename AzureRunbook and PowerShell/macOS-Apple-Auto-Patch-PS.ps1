@@ -30,8 +30,8 @@ $DebugPreference = "Continue"
 #$VerbosePreference = "Continue"
 
 $organisationScriptName = "Apple Auto Patch - macOS"
-$scriptVersion = "1.0.0"
-$scriptDate = "2025-04-17"
+$scriptVersion = "1.0.1"
+$scriptDate = "2025-04-25"
 
 # Jamf Pro API Variables
 $global:jamfProInformation = @{
