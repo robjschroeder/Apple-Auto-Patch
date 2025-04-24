@@ -13,6 +13,10 @@
 #       - Initial version
 #       - Script to process iOS updates from SOFA feed and create update plans in Jamf Pro
 #
+#   04.24.2025, 1.0.1, @robjschroeder
+#       - Added function to check if the Software Update feature toggle is on before continuing
+#       - Added device's serial number into the output details for the device
+#
 ####################################################################################################
 
 ####################################################################################################
@@ -26,8 +30,8 @@ $DebugPreference = "Continue"
 
 # Script Variables
 $organisationScriptName = "Jamf DDM SOFA Processor - iOS"
-$scriptVersion = "1.0.0"
-$scriptDate = "2025-04-23"
+$scriptVersion = "1.0.1"
+$scriptDate = "2025-04-24"
 $global:IgnoreDeferralCheck = $false
 
 # Jamf Pro API Variables
@@ -243,6 +247,19 @@ function Invoke-JamfAPIGETRequest {
             Write-Error "API request failed: $_"
             throw
         }
+    }
+}
+
+# Check if Software Update Feature is enabled
+function Check-SoftwareUpdateFeature {
+
+    $featureResponse = Invoke-JamfAPIGETRequest -Uri "$($jamfProInformation['URI'])/api/v1/managed-software-updates/plans/feature-toggle" -Headers $Headers -RetryCount 1
+
+    if ($featureResponse.StatusCode -eq 200) {
+        $featureContent = $featureResponse.Content | ConvertFrom-Json
+        $toggleEnabled = $($featureContent.toggle)
+    } else {
+        Write-Log-Warning "Failed to check Software Update Feature Toggle. Status code: $($featureResponse.StatusCode)"
     }
 }
 
@@ -611,12 +628,13 @@ function ProcessDevice-iPad {
 
     # Store device information
     $deviceName = $deviceInfo.name
+    $deviceSerialNumber = $deviceInfo.serialNumber
     $modelIdentifier = $deviceInfo.ios.modelIdentifier
     $osVersion = $deviceInfo.osVersion
     $installedOSMajor = [int]($osVersion -split '\.')[0]
     $latestOSVersion = Get-LatestOSVersion -sofaFeed $sofaJson -modelIdentifier $modelIdentifier
 
-    Write-Log-Info "Device: $deviceName | Model: $modelIdentifier | OS: $osVersion | Latest: $latestOSVersion"
+    Write-Log-Info "Device: $deviceName | Model: $modelIdentifier | Serial Number: $deviceSerialNumber | OS: $osVersion | Latest: $latestOSVersion"
 
     # Check the SOFA feed for supported OS versions
     $supportedOSMajors = @()
@@ -734,12 +752,13 @@ function ProcessDevice-iPhone {
 
     # Store device information
     $deviceName = $deviceInfo.name
+    $deviceSerialNumber = $deviceInfo.serialNumber
     $modelIdentifier = $deviceInfo.ios.modelIdentifier
     $osVersion = $deviceInfo.osVersion
     $installedOSMajor = [int]($osVersion -split '\.')[0]
     $latestOSVersion = Get-LatestOSVersion -sofaFeed $sofaJson -modelIdentifier $modelIdentifier
 
-    Write-Log-Info "Device: $deviceName | Model: $modelIdentifier | OS: $osVersion | Latest: $latestOSVersion"
+    Write-Log-Info "Device: $deviceName | Model: $modelIdentifier | Serial Number: $deviceSerialNumber | OS: $osVersion | Latest: $latestOSVersion"
 
     # Check the SOFA feed for supported OS versions
     $supportedOSMajors = @()
@@ -948,6 +967,16 @@ function Get-LatestOSVersion {
 function Main {
     Write-Log-Info "Starting $organisationScriptName - Version $scriptVersion - Date $scriptDate"
 
+    # Ensure the Software Update Feature is enabled
+    Get-BearerToken
+    Check-SoftwareUpdateFeature
+    if ($toggleEnabled -eq $false) {
+        Write-Log-Error "Software Update Feature is not enabled. Exiting script."
+        exit 1
+    } else {
+        Write-Log-Info "Software Update Feature is enabled."
+    }
+
     # Fetch the SOFA feed
     $sofaJson = Get-JsonFromUrl $global:sofaFeedInformation['URI']
     if (-not $sofaJson) {
@@ -982,7 +1011,6 @@ function Main {
     Check-CVESeverity -osVersions $osVersionsiOS
     Check-CVESeverity -osVersions $osVersionsiPadOS
     Write-Output ""
-    Get-BearerToken
 
     # Process each group
     foreach ($group in $global:jamfProSmartGroupIDs.GetEnumerator()) {
