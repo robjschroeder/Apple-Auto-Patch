@@ -14,6 +14,10 @@
 #       - Script to process macOS updates from SOFA feed and create update plans in Jamf Pro
 #       - Based on bash version of script, this will be ran from an Azure Runbook for automation. 
 #
+#   04.24.2025, 1.0.1, @robjschroeder
+#       - Added function to check the status of the software update feature in Jamf Pro before continuing
+#       - Added device's serial number to output
+#
 ####################################################################################################
 
 ####################################################################################################
@@ -235,6 +239,19 @@ function Invoke-JamfAPIGETRequest {
             Write-Error "API request failed: $_"
             throw
         }
+    }
+}
+
+# Check if Software Update Feature is enabled
+function Check-SoftwareUpdateFeature {
+
+    $featureResponse = Invoke-JamfAPIGETRequest -Uri "$($jamfProInformation['URI'])/api/v1/managed-software-updates/plans/feature-toggle" -Headers $Headers -RetryCount 1
+
+    if ($featureResponse.StatusCode -eq 200) {
+        $featureContent = $featureResponse.Content | ConvertFrom-Json
+        $toggleEnabled = $($featureContent.toggle)
+    } else {
+        Write-Log-Warning "Failed to check Software Update Feature Toggle. Status code: $($featureResponse.StatusCode)"
     }
 }
 
@@ -563,6 +580,7 @@ function ProcessGroup {
         $deviceInfo = Invoke-JamfAPIGETRequest -Uri "$($jamfProInformation['URI'])/api/v1/computers-inventory-detail/$($device)" -Headers $bearerTokenInformation -RetryCount 1
         $deviceInfo = $deviceInfo.Content | ConvertFrom-Json
         $deviceName = $deviceInfo.general.name
+        $deviceSerialNumber = $deviceInfo.serialNumber
         $modelIdentifier = $deviceInfo.hardware.modelIdentifier
         $osVersion = $deviceInfo.operatingSystem.version
         $installedOSMajor = ($osVersion -split '\.')[0]
@@ -619,7 +637,7 @@ function ProcessGroup {
             $targetVersion = $bestMatch.Version
             $targetDeadline = (Get-Date $bestMatch.ReleaseDate).AddDays($SWUDeferralDays + $bestMatch.DeadlineDays).Date.AddHours(18).ToUniversalTime()
             # Check if plan already exists
-            Write-Log-Info "Checking for existing plan for $device with Install Local DateTime $($targetDeadline.ToString("yyyy-MM-ddTHH:mm:ss"))"
+            Write-Log-Info "Checking for existing plan for $device (Serial: $deviceSerialNumber) with Install Local DateTime $($targetDeadline.ToString("yyyy-MM-ddTHH:mm:ss"))"
             $existingPlan = Get-ExistingPlan -DeviceID $device -ForceInstallLocalDateTime $targetDeadline.ToString("yyyy-MM-ddTHH:mm:ss")
             if ($existingPlan) {
                 $totalCount = $existingPlan.totalCount
@@ -651,6 +669,17 @@ function ProcessGroup {
 # Main function
 function Main {
     Write-Log-Info "Starting $organisationScriptName version $scriptVersion on $scriptDate"
+
+    # Ensure the Software Update Feature is enabled
+    Get-BearerToken
+    Check-SoftwareUpdateFeature
+    if ($toggleEnabled -eq $false) {
+        Write-Log-Error "Software Update Feature is not enabled. Exiting script."
+        exit 1
+    } else {
+        Write-Log-Info "Software Update Feature is enabled."
+    }
+    
     $sofaJson = Get-JsonFromUrl $global:sofaFeedInformation['URI']
 
     $osVersions = @()
@@ -668,7 +697,6 @@ function Main {
 
     CVESeverityCheck -osVersions $osVersions
     Write-Output ""
-    Get-BearerToken
 
     foreach ($group in $global:jamfProSmartGroupIDs.GetEnumerator()) {
         $groupName = $group.Key
