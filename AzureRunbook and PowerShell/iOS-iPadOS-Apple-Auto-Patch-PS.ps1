@@ -60,7 +60,7 @@ $global:jamfProSWUDeferralDays = @{
     "AlphaGroupDeferralDays" = 0
     "BetaGroupDeferralDays" = 3
     "GammaGroupDeferralDays" = 5
-    "ReleaseGroupDeferralDays" = 10
+    "ReleaseGroupDeferralDays" = 7
 }
 
 # Jamf Pro Group Version Type Overrides
@@ -293,7 +293,7 @@ function Parse-SOFAFeed-iOS {
             ProcessOS = $false
         }
 
-        Write-Log-Debug "Parsed iOS OS Entry: $($osVersionEntry.Name) $($osVersionEntry.Version)"
+        #Write-Log-Debug "Parsed iOS OS Entry: $($osVersionEntry.Name) $($osVersionEntry.Version)"
         $osVersions += $osVersionEntry
     }
 
@@ -329,7 +329,7 @@ function Parse-SOFAFeed-iPadOS {
             ProcessOS = $false
         }
 
-        Write-Log-Debug "Parsed iPadOS OS Entry: $($osVersionEntry.Name) $($osVersionEntry.Version)"
+        #Write-Log-Debug "Parsed iPadOS OS Entry: $($osVersionEntry.Name) $($osVersionEntry.Version)"
         $osVersions += $osVersionEntry
     }
 
@@ -634,7 +634,7 @@ function ProcessDevice-iPad {
     $installedOSMajor = [int]($osVersion -split '\.')[0]
     $latestOSVersion = Get-LatestOSVersion -sofaFeed $sofaJson -modelIdentifier $modelIdentifier
 
-    Write-Log-Info "Device: $deviceName | Model: $modelIdentifier | Serial Number: $deviceSerialNumber | OS: $osVersion | Latest: $latestOSVersion"
+    Write-Log-Info "Device: $deviceName | Model: $modelIdentifier | Serial Number: $deviceSerialNumber OS: $osVersion | Latest: $latestOSVersion"
 
     # Check the SOFA feed for supported OS versions
     $supportedOSMajors = @()
@@ -1011,6 +1011,7 @@ function Main {
     Check-CVESeverity -osVersions $osVersionsiOS
     Check-CVESeverity -osVersions $osVersionsiPadOS
     Write-Output ""
+    
 
     # Process each group
     foreach ($group in $global:jamfProSmartGroupIDs.GetEnumerator()) {
